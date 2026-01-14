@@ -1,0 +1,164 @@
+package com.example.demo.controller;
+
+import jakarta.validation.Valid;
+import java.util.List;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+
+import com.example.demo.domain.StudentRequest;
+import com.example.demo.entity.StudentEntity;
+import com.example.demo.service.StudentService;
+
+@RestController
+@RequestMapping("/students")
+public class StudentController {
+
+    private final StudentService studentService;
+
+    public StudentController(StudentService studentService) {
+        this.studentService = studentService;
+    }
+
+    // ===== GET ALL =====
+    @GetMapping
+    public List<StudentEntity> getStudents() {
+        return studentService.getStudents();
+    }
+
+    // ===== CREATE =====
+    @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<StudentEntity> createStudent(
+            @Valid @RequestBody StudentRequest studentRequest) {
+
+        StudentEntity student = studentService.addStudent(studentRequest);
+        return ResponseEntity.status(HttpStatus.CREATED).body(student);
+    }
+
+    // ===== UPDATE =====
+    @PutMapping("/{nim}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public StudentEntity updateStudent(
+            @PathVariable String nim,
+            @Valid @RequestBody StudentRequest studentRequest) {
+
+        return studentService.updateStudent(nim, studentRequest);
+    }
+
+    // ===== DELETE =====
+    @DeleteMapping("/{nim}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public String deleteStudent(@PathVariable String nim) {
+        studentService.deleteStudent(nim);
+        return "Successfully deleted";
+    }
+
+    // ===== FIND BY NIM =====
+    @GetMapping("/{nim}")
+    public StudentEntity findStudent(@PathVariable String nim) {
+        return studentService.findStudent(nim);
+    }
+
+    // ===== FIND BY EMAIL =====
+    @GetMapping("/email/{email}")
+    public StudentEntity findStudentByEmail(@PathVariable String email) {
+        return studentService.findStudentByEmail(email);
+    }
+}
+
+
+
+package com.example.demo.service;
+
+import java.util.List;
+
+import org.springframework.stereotype.Service;
+
+import com.example.demo.domain.StudentRequest;
+import com.example.demo.entity.StudentEntity;
+import com.example.demo.repository.StudentRepository;
+
+import lombok.RequiredArgsConstructor;
+
+@Service
+@RequiredArgsConstructor
+public class StudentService {
+
+    private final StudentRepository studentRepository;
+
+    private static final int LENGTH = 5;
+
+    // ================= GET ALL =================
+    public List<StudentEntity> getStudents() {
+        return studentRepository.findAll();
+    }
+
+    // ================= ADD =================
+    public StudentEntity addStudent(StudentRequest request) {
+
+        boolean exists = studentRepository.existsByFullNameAndDob(
+                request.getFullName(),
+                request.getDob()
+        );
+
+        if (exists) {
+            throw new RuntimeException("Data already exists");
+        }
+
+        // generate NIM (inline)
+        String maxNim = studentRepository.findMaxNim();
+        String nim = (maxNim == null)
+                ? String.format("%0" + LENGTH + "d", 1)
+                : String.format("%0" + LENGTH + "d", Integer.parseInt(maxNim) + 1);
+
+        StudentEntity entity = new StudentEntity();
+        entity.setNim(nim);
+        entity.setFullName(request.getFullName());
+        entity.setDob(request.getDob());
+        entity.setAddress(request.getAddress());
+        entity.setEmail(request.getEmail());
+
+        return studentRepository.save(entity);
+    }
+
+    // ================= DELETE =================
+    public void deleteStudent(String nim) {
+        StudentEntity entity = studentRepository.findByNim(nim)
+                .orElseThrow(() ->
+                        new RuntimeException("Student with NIM " + nim + " not found"));
+
+        studentRepository.delete(entity);
+    }
+
+    // ================= UPDATE =================
+    public StudentEntity updateStudent(String nim, StudentRequest request) {
+
+        StudentEntity entity = studentRepository.findByNim(nim)
+                .orElseThrow(() ->
+                        new RuntimeException("Student with NIM " + nim + " not found"));
+
+        entity.setFullName(request.getFullName());
+        entity.setDob(request.getDob());
+        entity.setAddress(request.getAddress());
+        entity.setEmail(request.getEmail());
+
+        return studentRepository.save(entity);
+    }
+
+    // ================= FIND BY NIM =================
+    public StudentEntity findStudent(String nim) {
+        return studentRepository.findByNim(nim)
+                .orElseThrow(() ->
+                        new RuntimeException("Student with NIM " + nim + " not found"));
+    }
+
+    // ================= FIND BY EMAIL =================
+    public StudentEntity findStudentByEmail(String email) {
+        return studentRepository.findByEmail(email)
+                .orElseThrow(() ->
+                        new RuntimeException("Student with email " + email + " not found"));
+    }
+}
